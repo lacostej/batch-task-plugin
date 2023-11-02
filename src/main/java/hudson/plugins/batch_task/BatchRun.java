@@ -12,18 +12,12 @@ import hudson.util.Iterators;
 
 import org.jenkinsci.lib.envinject.EnvInjectException;
 import org.jenkinsci.lib.envinject.service.EnvVarsResolver;
-import org.kohsuke.stapler.StaplerRequest;
-import org.kohsuke.stapler.StaplerResponse;
-import org.kohsuke.stapler.export.Exported;
-import org.kohsuke.stapler.framework.io.LargeText;
-import org.kohsuke.stapler.verb.POST;
 
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Calendar;
-import java.util.GregorianCalendar;
 import java.util.Objects;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -34,11 +28,7 @@ import java.util.logging.Logger;
  * @author Kohsuke Kawaguchi
  */
 public final class BatchRun extends Run<BatchTask.BatchJob, BatchRun> implements Executable, Comparable<BatchRun> {
-    /**
-     * Build result.
-     * If null, we are still building.
-     */
-    protected Result result;
+
     public final Calendar timestamp;
 
     protected transient BatchRunAction parent;
@@ -55,10 +45,6 @@ public final class BatchRun extends Run<BatchTask.BatchJob, BatchRun> implements
      */
     public final String taskName;
 
-    /**
-     * Number of milli-seconds it took to run this build.
-     */
-    protected long duration;
 
     protected BatchRun(Calendar timestamp, BatchRunAction parent, int id, BatchTask task) throws IOException {
         super(task.getJob());
@@ -68,25 +54,11 @@ public final class BatchRun extends Run<BatchTask.BatchJob, BatchRun> implements
         this.taskName = task.name;
     }
 
-    public Result getResult() {
-        return result;
-    }
-
     /**
      * Is this task still running?
      */
     public boolean isRunning() {
         return result == null;
-    }
-
-    /**
-     * Gets the string that says how long since this run has started.
-     *
-     * @return string like "3 minutes" "1 day" etc.
-     */
-    public String getTimestampString() {
-        long time = new GregorianCalendar().getTimeInMillis() - timestamp.getTimeInMillis();
-        return Util.getTimeSpanString(time);
     }
 
     /**
@@ -104,26 +76,6 @@ public final class BatchRun extends Run<BatchTask.BatchJob, BatchRun> implements
 
     public BatchRunAction getOwner() {
         return parent;
-    }
-
-    /**
-     * Gets the icon color for display.
-     */
-    public BallColor getIconColor() {
-        if (!isRunning()) {
-            // already built
-            return getResult().color;
-        }
-
-        // a new build is in progress
-        BatchRun previous = getPrevious();
-        BallColor baseColor;
-        if (previous == null)
-            baseColor = BallColor.GREY_ANIME;
-        else
-            baseColor = previous.getIconColor();
-
-        return baseColor.anime();
     }
 
     public String getBuildStatusIconClassName() {
@@ -191,23 +143,6 @@ public final class BatchRun extends Run<BatchTask.BatchJob, BatchRun> implements
 
     public String getBuildNumber() {
         return "#" + getNumberAsString();
-    }
-
-    /**
-     * Gets the string that says how long the build took to run.
-     */
-    public String getDurationString() {
-        if (isRunning())
-            return Util.getTimeSpanString(System.currentTimeMillis() - timestamp.getTimeInMillis()) + " and counting";
-        return Util.getTimeSpanString(duration);
-    }
-
-    /**
-     * Gets the millisecond it took to build.
-     */
-    @Exported
-    public long getDuration() {
-        return duration;
     }
 
     public void run() {
@@ -323,13 +258,6 @@ public final class BatchRun extends Run<BatchTask.BatchJob, BatchRun> implements
             if (result == null)
                 result = Result.FAILURE;
         }
-    }
-
-    /**
-     * Handles incremental log output.
-     */
-    public void doProgressiveLog(StaplerRequest req, StaplerResponse rsp) throws IOException {
-        new LargeText(getLogFile(), !isRunning()).doProgressText(req, rsp);
     }
 
     // used by the executors listing
