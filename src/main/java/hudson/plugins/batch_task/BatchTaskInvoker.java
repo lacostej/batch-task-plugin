@@ -118,7 +118,7 @@ public class BatchTaskInvoker extends Notifier {
                 seenJobs.add(project);
             }
             logger.println(Messages.BatchTaskInvoker_Invoking(project,task,buildNum));
-            Jenkins.getInstance().getQueue().schedule(taskObj,0,
+            Jenkins.getInstance().getQueue().schedule(taskObj.job,0,
                     new CauseAction(new UpstreamCause((Run)build)));
             return true;
         }

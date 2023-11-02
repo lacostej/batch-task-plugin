@@ -18,7 +18,7 @@ import java.util.List;
  * @author Kohsuke Kawaguchi
  */
 public final class BatchRunAction implements Action {
-    public final AbstractBuild<?,?> owner;
+    public transient AbstractBuild<?,?> owner;
     protected final List<BatchRun> records = new LinkedList<BatchRun>();
 
     public BatchRunAction(AbstractBuild<?, ?> owner) {

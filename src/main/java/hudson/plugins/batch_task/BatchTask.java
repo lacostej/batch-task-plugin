@@ -38,7 +38,7 @@ import org.springframework.security.access.AccessDeniedException;
  * 
  * @author Kohsuke Kawaguchi
  */
-public final class BatchTask extends AbstractModelObject implements Queue.Task, AccessControlled {
+public final class BatchTask extends AbstractModelObject implements AccessControlled {
     private static final Logger LOGGER = Logger.getLogger(BatchTask.class.getName());
     /**
      * Name of this task. Used for display.
@@ -310,13 +310,7 @@ public final class BatchTask extends AbstractModelObject implements Queue.Task, 
     }
 
     public HistoryWidget createHistoryWidget() {
-        Iterable<BatchRun> iterable = getRuns();
-        List<BatchRun> runs = new ArrayList<>();
-        iterable.forEach(runs::add);
-
-        LOGGER.log(Level.SEVERE, "createHistoryWidget() runs count: " + runs.size());
-
-        return new BuildHistoryWidget<BatchRun>(this,getRuns(),ADAPTER);
+        return new BuildHistoryWidget<BatchRun>(job,getRuns(),ADAPTER);
     }
 
     public BatchRun createExecutable() throws IOException {
@@ -408,7 +402,7 @@ public final class BatchTask extends AbstractModelObject implements Queue.Task, 
         getACL().checkPermission(AbstractProject.BUILD);
 
         if (owner.getLastBuild() != null) {
-            Jenkins.getInstance().getQueue().schedule(this,0,new CauseAction(new UserCause()));
+            Jenkins.getInstance().getQueue().schedule(job,0,new CauseAction(new UserCause()));
             rsp.forwardToPreviousPage(req);
         } else {
             rsp.sendRedirect2("noBuild");
@@ -465,7 +459,7 @@ public final class BatchTask extends AbstractModelObject implements Queue.Task, 
 			throws IOException, ServletException {
         checkAbortPermission();
 
-        Jenkins.getInstance().getQueue().cancel(this);
+        Jenkins.getInstance().getQueue().cancel(job);
         rsp.forwardToPreviousPage(req);
 	}
 
@@ -506,23 +500,26 @@ public final class BatchTask extends AbstractModelObject implements Queue.Task, 
     /**
      * {@inheritDoc}
      */
-    public Collection<? extends SubTask> getSubTasks() {
+    /*public Collection<? extends SubTask> getSubTasks() {
         return Collections.singleton(this);
-    }
+    }*/
 
     /** {@inheritDoc} */
+    /*
     @Nonnull
     @Override
     public Authentication getDefaultAuthentication() {
         return ACL.SYSTEM;
-    }
+    }*/
 
     /**
      * {@inheritDoc}
      */
+    /*
     public Task getOwnerTask() {
        return this;
     }
+    */
 
     /**
      * {@inheritDoc}
