@@ -18,7 +18,7 @@ import java.util.List;
  * @author Kohsuke Kawaguchi
  */
 public final class BatchRunAction implements Action {
-    public transient AbstractBuild<?,?> owner;
+    public final AbstractBuild<?,?> owner;
     protected final List<BatchRun> records = new LinkedList<BatchRun>();
 
     public BatchRunAction(AbstractBuild<?, ?> owner) {
@@ -61,7 +61,7 @@ public final class BatchRunAction implements Action {
     public List<BatchRun.RunAdapter> getRecords(String taskName) {
         List<BatchRun.RunAdapter> result = new ArrayList<>(records.size());
         for (BatchRun r : records) {
-            if (r.taskName.equals(taskName)) result.add(r.run);
+            if (r.taskName.equals(taskName)) result.add(r.getUpdatedRun());
         }
         return result;
     }

@@ -39,7 +39,7 @@ public final class BatchRun extends Actionable implements Executable, Comparable
     protected transient BatchRunAction parent;
 
     /**
-     * Unique number that identifie this record among {@link BatchRunAction}.
+     * Unique number that identifies this record among {@link BatchRunAction}.
      */
     public final int id;
 
@@ -50,9 +50,14 @@ public final class BatchRun extends Actionable implements Executable, Comparable
      */
     public final String taskName;
 
+    /**
+     * Number of milli-seconds it took to run this build.
+     */
+    protected long duration;
+
     transient BatchTask task;
 
-    transient RunAdapter run;
+    transient private RunAdapter run;
 
     protected BatchRun(Calendar timestamp, BatchRunAction parent, int id, BatchTask task) throws IOException {
         this.task = task;
@@ -67,12 +72,18 @@ public final class BatchRun extends Actionable implements Executable, Comparable
         return result;
     }
 
+    public RunAdapter getUpdatedRun() {
+        run.setResult(result);
+        return run;
+    }
+
     public static class RunAdapter extends Run<BatchTask.JobAdapter, RunAdapter> {
         transient BatchRun run;
 
         RunAdapter(BatchRun batchRun) throws IOException {
             super(batchRun.task.job);
             run = batchRun;
+            this.timestamp = batchRun.timestamp.getTimeInMillis();
         }
 
         public void setDuration(long duration) {
@@ -175,9 +186,18 @@ public final class BatchRun extends Actionable implements Executable, Comparable
     }
 
     public long getDuration() {
-        return run.getDuration();
+        return this.duration;
     }
-    
+
+    public void setDuration(long duration) {
+        this.duration = duration;
+        run.setDuration(duration);
+    }
+
+    protected Object readResolve() {
+        //this.result = run.getResult();
+        return this;
+    }
     public void run() {
         StreamBuildListener listener = null;
         try {
@@ -275,7 +295,7 @@ public final class BatchRun extends Actionable implements Executable, Comparable
             } catch (EnvInjectException e) {
                 e.printStackTrace();  //To change body of catch statement use File | Settings | File Templates.
             }
-            run.setDuration(System.currentTimeMillis() - start);
+            setDuration(System.currentTimeMillis() - start);
 
             // save the build result
             parent.owner.save();
@@ -311,12 +331,12 @@ public final class BatchRun extends Actionable implements Executable, Comparable
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         BatchRun batchRun = (BatchRun) o;
-        return id == batchRun.id && getDuration() == batchRun.getDuration() && Objects.equals(result, batchRun.result) && Objects.equals(timestamp, batchRun.timestamp) && Objects.equals(parent, batchRun.parent) && Objects.equals(taskName, batchRun.taskName);
+        return id == batchRun.id && duration == batchRun.duration && Objects.equals(result, batchRun.result) && Objects.equals(timestamp, batchRun.timestamp) && Objects.equals(parent, batchRun.parent) && Objects.equals(taskName, batchRun.taskName);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(result, timestamp, parent, id, taskName, getDuration());
+        return Objects.hash(result, timestamp, parent, id, taskName, duration);
     }
 
     public long getEstimatedDuration() {

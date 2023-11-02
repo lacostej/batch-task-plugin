@@ -306,7 +306,7 @@ public final class BatchTask extends AbstractModelObject implements Queue.Task, 
     }
 
     public HistoryWidget createHistoryWidget() {
-        return new BuildHistoryWidget<BatchRun.RunAdapter>(job,getRuns(),ADAPTER);
+        return new BuildHistoryWidget<>(job,getRuns(),ADAPTER);
     }
 
     public BatchRun createExecutable() throws IOException {
