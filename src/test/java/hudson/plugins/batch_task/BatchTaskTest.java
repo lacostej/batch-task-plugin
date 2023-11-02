@@ -108,8 +108,8 @@ public class BatchTaskTest {
         assertTrue("Expected 1-1:global-property:bar:anonymous in task output: " + log,
                 log.contains("1-1:global-property:bar:anonymous"));
 
-        Iterable<BatchRun> iterable = task.getRuns();
-        List<BatchRun> runs = new ArrayList<>();
+        Iterable<BatchRun.RunAdapter> iterable = task.getRuns();
+        List<BatchRun.RunAdapter> runs = new ArrayList<>();
         iterable.forEach(runs::add);
 
         assertEquals("Runs count is 1", 1, runs.size());

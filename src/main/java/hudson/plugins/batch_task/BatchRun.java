@@ -27,7 +27,12 @@ import java.util.logging.Logger;
  *
  * @author Kohsuke Kawaguchi
  */
-public final class BatchRun extends Run<BatchTask.BatchJob, BatchRun> implements Executable, Comparable<BatchRun> {
+public final class BatchRun extends Actionable implements Executable, Comparable<BatchRun> {
+    /**
+     * Build result.
+     * If null, we are still building.
+     */
+    protected Result result;
 
     public final Calendar timestamp;
 
@@ -45,15 +50,35 @@ public final class BatchRun extends Run<BatchTask.BatchJob, BatchRun> implements
      */
     public final String taskName;
 
+    transient BatchTask task;
+
+    transient RunAdapter run;
 
     protected BatchRun(Calendar timestamp, BatchRunAction parent, int id, BatchTask task) throws IOException {
-        super(task.getJob());
+        this.task = task;
         this.timestamp = timestamp;
         this.parent = parent;
         this.id = id;
         this.taskName = task.name;
+        this.run = new RunAdapter(this);
     }
 
+    public Result getResult() {
+        return result;
+    }
+
+    public static class RunAdapter extends Run<BatchTask.JobAdapter, RunAdapter> {
+        transient BatchRun run;
+
+        RunAdapter(BatchRun batchRun) throws IOException {
+            super(batchRun.task.job);
+            run = batchRun;
+        }
+
+        public void setDuration(long duration) {
+            this.duration = duration;
+        }
+    }
     /**
      * Is this task still running?
      */
@@ -69,9 +94,13 @@ public final class BatchRun extends Run<BatchTask.BatchJob, BatchRun> implements
     }
 
     @NonNull
-    public BatchTask getParentTask() {
+    public BatchTask getParent() {
         BatchTaskAction jta = parent.owner.getProject().getAction(BatchTaskAction.class);
         return jta.getTask(taskName);
+    }
+
+    public BallColor getIconColor() {
+        return run.getIconColor();
     }
 
     public BatchRunAction getOwner() {
@@ -129,9 +158,9 @@ public final class BatchRun extends Run<BatchTask.BatchJob, BatchRun> implements
         return parent.owner.getUrl() + "batchTasks/" + id;
     }
 
-    /*public String getSearchUrl() {
+    public String getSearchUrl() {
         return getUrl();
-    }*/
+    }
 
     public String getDisplayName() {
         return taskName + ' ' + getBuildNumber();
@@ -145,6 +174,10 @@ public final class BatchRun extends Run<BatchTask.BatchJob, BatchRun> implements
         return "#" + getNumberAsString();
     }
 
+    public long getDuration() {
+        return run.getDuration();
+    }
+    
     public void run() {
         StreamBuildListener listener = null;
         try {
@@ -159,7 +192,7 @@ public final class BatchRun extends Run<BatchTask.BatchJob, BatchRun> implements
 
             Launcher launcher = node.createLauncher(listener);
 
-            BatchTask task = getParentTask();
+            BatchTask task = getParent();
             if (task == null)
                 throw new AbortException("ERROR: undefined task \"" + taskName + "\"");
             AbstractBuild<?, ?> lb = task.owner.getLastBuild();
@@ -242,7 +275,7 @@ public final class BatchRun extends Run<BatchTask.BatchJob, BatchRun> implements
             } catch (EnvInjectException e) {
                 e.printStackTrace();  //To change body of catch statement use File | Settings | File Templates.
             }
-            duration = System.currentTimeMillis() - start;
+            run.setDuration(System.currentTimeMillis() - start);
 
             // save the build result
             parent.owner.save();
@@ -278,16 +311,16 @@ public final class BatchRun extends Run<BatchTask.BatchJob, BatchRun> implements
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         BatchRun batchRun = (BatchRun) o;
-        return id == batchRun.id && duration == batchRun.duration && Objects.equals(result, batchRun.result) && Objects.equals(timestamp, batchRun.timestamp) && Objects.equals(parent, batchRun.parent) && Objects.equals(taskName, batchRun.taskName);
+        return id == batchRun.id && getDuration() == batchRun.getDuration() && Objects.equals(result, batchRun.result) && Objects.equals(timestamp, batchRun.timestamp) && Objects.equals(parent, batchRun.parent) && Objects.equals(taskName, batchRun.taskName);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(result, timestamp, parent, id, taskName, duration);
+        return Objects.hash(result, timestamp, parent, id, taskName, getDuration());
     }
 
     public long getEstimatedDuration() {
-        return getParentTask().getEstimatedDuration();
+        return getParent().getEstimatedDuration();
     }
 
     private static final Logger LOGGER = Logger.getLogger(BatchRun.class.getName());

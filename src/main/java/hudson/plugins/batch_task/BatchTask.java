@@ -3,9 +3,7 @@ package hudson.plugins.batch_task;
 import hudson.model.*;
 import hudson.model.Cause.UserCause;
 import hudson.model.Queue;
-import hudson.model.Queue.Task;
 import hudson.model.queue.CauseOfBlockage;
-import hudson.model.queue.SubTask;
 import hudson.security.AccessControlled;
 import hudson.util.Iterators;
 import hudson.widgets.BuildHistoryWidget;
@@ -13,13 +11,10 @@ import hudson.widgets.HistoryWidget;
 import hudson.widgets.HistoryWidget.Adapter;
 import hudson.security.ACL;
 import jenkins.model.Jenkins;
-import jenkins.model.lazy.LazyBuildMixIn;
-import org.acegisecurity.Authentication;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.StaplerRequest;
 import org.kohsuke.stapler.StaplerResponse;
 
-import javax.annotation.Nonnull;
 import javax.servlet.ServletException;
 import java.io.File;
 import java.io.IOException;
@@ -38,7 +33,7 @@ import org.springframework.security.access.AccessDeniedException;
  * 
  * @author Kohsuke Kawaguchi
  */
-public final class BatchTask extends AbstractModelObject implements AccessControlled {
+public final class BatchTask extends AbstractModelObject implements Queue.Task, AccessControlled {
     private static final Logger LOGGER = Logger.getLogger(BatchTask.class.getName());
     /**
      * Name of this task. Used for display.
@@ -53,7 +48,7 @@ public final class BatchTask extends AbstractModelObject implements AccessContro
 
     /*package*/ transient BatchTaskProperty parent;
 
-    /*package*/ transient BatchJob job;
+    /*package*/ transient JobAdapter job;
 
     @DataBoundConstructor
     public BatchTask(String name, String script) {
@@ -64,7 +59,7 @@ public final class BatchTask extends AbstractModelObject implements AccessContro
     void setParentProperty(BatchTaskProperty parent) {
         this.parent = parent;
         this.owner = parent.getOwner();
-        this.job = new BatchJob(new BatchJobItemGroup(parent), name, this);
+        this.job = new JobAdapter(new BatchJobItemGroup(parent), name, this);
     }
 
     public static class BatchJobItemGroup implements ItemGroup {
@@ -143,11 +138,11 @@ public final class BatchTask extends AbstractModelObject implements AccessContro
             }
         };
     }*/
-    public static class BatchJob extends Job<BatchJob, BatchRun> implements Queue.Task {
+    public static class JobAdapter extends Job<BatchTask.JobAdapter, BatchRun.RunAdapter> implements Queue.Task {
 
         transient BatchTask task;
 
-        protected BatchJob(ItemGroup parent, String name, BatchTask task) {
+        protected JobAdapter(ItemGroup parent, String name, BatchTask task) {
             super(parent, name);
             this.task = task;
         }
@@ -158,19 +153,19 @@ public final class BatchTask extends AbstractModelObject implements AccessContro
         }
 
         @Override
-        protected SortedMap<Integer, BatchRun> _getRuns() {
-            Iterable<BatchRun> runs = task.getRuns();
-            SortedMap<Integer, BatchRun> results = new RunMap();
+        protected SortedMap<Integer, BatchRun.RunAdapter> _getRuns() {
+            Iterable<BatchRun.RunAdapter> runs = task.getRuns();
+            SortedMap<Integer, BatchRun.RunAdapter> results = new RunMap();
             runs.forEach(batchRun ->
-                results.put(batchRun.id, batchRun)
+                results.put(batchRun.run.id, batchRun)
             );
             return results;
         }
 
         @Override
-        protected void removeRun(BatchRun run) {
+        protected void removeRun(BatchRun.RunAdapter run) {
             try {
-                task.parent.removeTask(run.getParentTask());
+                task.parent.removeTask(run.getParent().task);
             } catch (IOException e) {
                 throw new RuntimeException(e);
             }
@@ -192,7 +187,8 @@ public final class BatchTask extends AbstractModelObject implements AccessContro
             return task.createExecutable();
         }
     }
-    BatchJob getJob() {
+
+    JobAdapter getJob() {
         return job;
     }
 
@@ -295,11 +291,11 @@ public final class BatchTask extends AbstractModelObject implements AccessContro
     /**
      * Gets all the run records.
      */
-    public Iterable<BatchRun> getRuns() {
-        return new Iterable<BatchRun>() {
-            public Iterator<BatchRun> iterator() {
-                return new Iterators.FlattenIterator<BatchRun,AbstractBuild<?,?>>(owner.getBuilds().iterator()) {
-                    protected Iterator<BatchRun> expand(AbstractBuild<?,?> b) {
+    public Iterable<BatchRun.RunAdapter> getRuns() {
+        return new Iterable<BatchRun.RunAdapter>() {
+            public Iterator<BatchRun.RunAdapter> iterator() {
+                return new Iterators.FlattenIterator<BatchRun.RunAdapter,AbstractBuild<?,?>>(owner.getBuilds().iterator()) {
+                    protected Iterator<BatchRun.RunAdapter> expand(AbstractBuild<?,?> b) {
                         BatchRunAction a = b.getAction(BatchRunAction.class);
                         if(a==null) return Iterators.empty();
                         else        return a.getRecords(name).iterator();
@@ -310,7 +306,7 @@ public final class BatchTask extends AbstractModelObject implements AccessContro
     }
 
     public HistoryWidget createHistoryWidget() {
-        return new BuildHistoryWidget<BatchRun>(job,getRuns(),ADAPTER);
+        return new BuildHistoryWidget<BatchRun.RunAdapter>(job,getRuns(),ADAPTER);
     }
 
     public BatchRun createExecutable() throws IOException {
@@ -343,7 +339,7 @@ public final class BatchTask extends AbstractModelObject implements AccessContro
         int id=1;
         BatchRunAction records = lb.getAction(BatchRunAction.class);
         if(records!=null)
-            id=records.getRecords().size()+1;
+            id=records.getRecordsCount()+1;
 
         return lb.getNumber()+"-"+id;
     }
@@ -420,9 +416,9 @@ public final class BatchTask extends AbstractModelObject implements AccessContro
         rsp.sendRedirect2("../..");
     }
 
-    private static final Adapter<BatchRun> ADAPTER = new Adapter<BatchRun>() {
-        public int compare(BatchRun record, String key) {
-            int[] lhs = parse(record.getNumberAsString());
+    private static final Adapter<BatchRun.RunAdapter> ADAPTER = new Adapter<BatchRun.RunAdapter>() {
+        public int compare(BatchRun.RunAdapter record, String key) {
+            int[] lhs = parse(record.run.getNumberAsString());
             int[] rhs = parse(key);
 
             int d = lhs[0]-rhs[0];
@@ -430,12 +426,12 @@ public final class BatchTask extends AbstractModelObject implements AccessContro
             return lhs[1]-rhs[1];
         }
 
-        public String getKey(BatchRun record) {
-            return record.getNumberAsString();
+        public String getKey(BatchRun.RunAdapter record) {
+            return record.run.getNumberAsString();
         }
 
-        public boolean isBuilding(BatchRun record) {
-            return record.isRunning();
+        public boolean isBuilding(BatchRun.RunAdapter record) {
+            return record.run.isRunning();
         }
 
         public String getNextKey(String key) {
@@ -482,7 +478,7 @@ public final class BatchTask extends AbstractModelObject implements AccessContro
                 if(idx<0)   throw new NoSuchElementException("Illegal format: "+str);
 
                 String projectName = str.substring(0, idx);
-                Job<?,?> job = (Job<?,?>) Jenkins.getInstance().getItemByFullName(projectName);
+                hudson.model.Job<?,?> job = (hudson.model.Job<?,?>) Jenkins.getInstance().getItemByFullName(projectName);
                 if(job==null)  throw new NoSuchElementException("No such job exists: "+projectName);
                 BatchTaskProperty bp = job.getProperty(BatchTaskProperty.class);
                 if(bp==null)  throw new NoSuchElementException(projectName+" doesn't have the batck task anymore");

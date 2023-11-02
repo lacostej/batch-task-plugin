@@ -50,18 +50,18 @@ public final class BatchRunAction implements Action {
     /**
      * Gets run records. Newer ones first.
      */
-    public List<BatchRun> getRecords() {
-        return Collections.unmodifiableList(records);
+    public int getRecordsCount() {
+        return records.size();
     }
 
     /**
      * Get run records for a particular task.
      * @param taskName Get runs for this task
      */
-    public List<BatchRun> getRecords(String taskName) {
-        List<BatchRun> result = new ArrayList<BatchRun>(records.size());
+    public List<BatchRun.RunAdapter> getRecords(String taskName) {
+        List<BatchRun.RunAdapter> result = new ArrayList<>(records.size());
         for (BatchRun r : records) {
-            if (r.taskName.equals(taskName)) result.add(r);
+            if (r.taskName.equals(taskName)) result.add(r.run);
         }
         return result;
     }
