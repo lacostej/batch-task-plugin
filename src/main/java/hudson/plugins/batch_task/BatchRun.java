@@ -12,12 +12,17 @@ import hudson.util.Iterators;
 
 import org.jenkinsci.lib.envinject.EnvInjectException;
 import org.jenkinsci.lib.envinject.service.EnvVarsResolver;
+import org.kohsuke.stapler.StaplerRequest;
+import org.kohsuke.stapler.StaplerResponse;
+import org.kohsuke.stapler.export.Exported;
+import org.kohsuke.stapler.framework.io.LargeText;
 
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Calendar;
+import java.util.GregorianCalendar;
 import java.util.Objects;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -72,18 +77,39 @@ public final class BatchRun extends Actionable implements Executable, Comparable
         return result;
     }
 
-    public RunAdapter getUpdatedRun() {
-        run.setResult(result);
+    public RunAdapter getUpdatedRun(BatchTask task) {
+        this.task = task;
+        this.run = RunAdapter.from(this);
+        // run.setResult(result); // this fails as Run protects modifying the result
+/*
+	WARNING	h.ExpressionFactory2$JexlExpression#evaluate: Caught exception evaluating: it.historyPageFilter in /jenkins/job/test_batch_task/batchTasks/task/task%201/. Reason: java.lang.reflect.InvocationTargetException
+java.lang.IllegalStateException: cannot change build result while in NOT_STARTED
+	at hudson.model.Run.setResult(Run.java:505)
+	at hudson.plugins.batch_task.BatchRun.getUpdatedRun(BatchRun.java:83)
+	at hudson.plugins.batch_task.BatchRunAction.getRecords(BatchRunAction.java:65)
+	*/
         return run;
     }
 
     public static class RunAdapter extends Run<BatchTask.JobAdapter, RunAdapter> {
         transient BatchRun run;
 
-        RunAdapter(BatchRun batchRun) throws IOException {
+        // FIXME clean up API
+        private RunAdapter(BatchRun batchRun) throws IOException {
             super(batchRun.task.job);
             run = batchRun;
             this.timestamp = batchRun.timestamp.getTimeInMillis();
+        }
+        private RunAdapter(BatchRun batchRun, Calendar calendar) {
+            super(batchRun.task.job, calendar);
+            super.number = batchRun.id;
+
+            run = batchRun;
+            this.timestamp = batchRun.timestamp.getTimeInMillis();
+        }
+
+        static RunAdapter from(BatchRun batchRun) {
+            return new RunAdapter(batchRun, batchRun.timestamp);
         }
 
         public void setDuration(long duration) {
@@ -95,6 +121,17 @@ public final class BatchRun extends Actionable implements Executable, Comparable
      */
     public boolean isRunning() {
         return result == null;
+    }
+
+    /**
+     * Gets the string that says how long since this run has started.
+     *
+     * @return string like "3 minutes" "1 day" etc.
+     */
+    public String getTimestampString() {
+        // FIXME run.getTimestampString();
+        long time = new GregorianCalendar().getTimeInMillis() - timestamp.getTimeInMillis();
+        return Util.getTimeSpanString(time);
     }
 
     /**
@@ -177,16 +214,29 @@ public final class BatchRun extends Actionable implements Executable, Comparable
         return taskName + ' ' + getBuildNumber();
     }
 
-    public String getNumberAsString() {
+    public String getNumber() {
         return "" + parent.owner.getNumber() + "-" + id;
     }
 
     public String getBuildNumber() {
-        return "#" + getNumberAsString();
+        return "#" + getNumber();
     }
 
+    /**
+     * Gets the string that says how long the build took to run.
+     */
+    public String getDurationString() {
+        if (isRunning())
+            return Util.getTimeSpanString(System.currentTimeMillis() - timestamp.getTimeInMillis()) + " and counting";
+        return Util.getTimeSpanString(duration);
+    }
+
+    /**
+     * Gets the millisecond it took to build.
+     */
+    @Exported
     public long getDuration() {
-        return this.duration;
+        return duration;
     }
 
     public void setDuration(long duration) {
@@ -194,7 +244,13 @@ public final class BatchRun extends Actionable implements Executable, Comparable
         run.setDuration(duration);
     }
 
-    protected Object readResolve() {
+    void setParent(BatchRunAction parent) {
+        this.parent = parent;
+        // this.run = RunAdapter.from(this);
+    }
+
+    Object readResolve() {
+        // this.run = RunAdapter.from(this);
         //this.result = run.getResult();
         return this;
     }
@@ -238,7 +294,7 @@ public final class BatchRun extends Actionable implements Executable, Comparable
                         // Apply global and node properties
                         for (Environment e : buildEnvironments) e.buildEnvVars(env);
                         // Our task id
-                        env.put("TASK_ID", getNumberAsString());
+                        env.put("TASK_ID", getNumber());
                         // User who triggered this task run, if applicable
                         out:
                         for (CauseAction ca : getActions(CauseAction.class))
@@ -313,10 +369,23 @@ public final class BatchRun extends Actionable implements Executable, Comparable
         }
     }
 
+   /**
+    * Handles incremental log output.
+    */
+    public void doProgressiveLog(StaplerRequest req, StaplerResponse rsp) throws IOException {
+        // FIXME
+        // use ? run.getLogText().doProgressiveText(req, rsp);
+        new LargeText(getLogFile(), !isRunning()).doProgressText(req, rsp);
+    }
+
     // used by the executors listing
     @Override
     public String toString() {
-        return parent.owner.toString() + '-' + id;
+        String parentName = "not yet resolved";
+        if (parent != null && parent.owner != null) {
+            parentName = parent.owner.toString();
+        }
+        return parentName + '-' + id;
     }
 
     /**

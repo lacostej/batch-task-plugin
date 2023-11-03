@@ -1,9 +1,22 @@
 package hudson.plugins.batch_task;
 
-import hudson.model.*;
+import hudson.model.AbstractBuild;
+import hudson.model.AbstractModelObject;
+import hudson.model.AbstractProject;
+import hudson.model.BallColor;
 import hudson.model.Cause.UserCause;
+import hudson.model.Item;
+import hudson.model.ItemGroup;
+import hudson.model.Job;
 import hudson.model.Queue;
+import hudson.model.CauseAction;
+import hudson.model.Label;
+import hudson.model.Node;
+import hudson.model.ResourceList;
+import hudson.model.Result;
+import hudson.model.RunMap;
 import hudson.model.queue.CauseOfBlockage;
+import hudson.model.queue.SubTask;
 import hudson.security.AccessControlled;
 import hudson.util.Iterators;
 import hudson.widgets.BuildHistoryWidget;
@@ -11,10 +24,12 @@ import hudson.widgets.HistoryWidget;
 import hudson.widgets.HistoryWidget.Adapter;
 import hudson.security.ACL;
 import jenkins.model.Jenkins;
+import org.acegisecurity.Authentication;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.StaplerRequest;
 import org.kohsuke.stapler.StaplerResponse;
 
+import javax.annotation.Nonnull;
 import javax.servlet.ServletException;
 import java.io.File;
 import java.io.IOException;
@@ -292,13 +307,14 @@ public final class BatchTask extends AbstractModelObject implements Queue.Task, 
      * Gets all the run records.
      */
     public Iterable<BatchRun.RunAdapter> getRuns() {
+        BatchTask task = this;
         return new Iterable<BatchRun.RunAdapter>() {
             public Iterator<BatchRun.RunAdapter> iterator() {
                 return new Iterators.FlattenIterator<BatchRun.RunAdapter,AbstractBuild<?,?>>(owner.getBuilds().iterator()) {
                     protected Iterator<BatchRun.RunAdapter> expand(AbstractBuild<?,?> b) {
                         BatchRunAction a = b.getAction(BatchRunAction.class);
                         if(a==null) return Iterators.empty();
-                        else        return a.getRecords(name).iterator();
+                        else        return a.getRecords(task).iterator();
                     }
                 };
             }
@@ -339,7 +355,7 @@ public final class BatchTask extends AbstractModelObject implements Queue.Task, 
         int id=1;
         BatchRunAction records = lb.getAction(BatchRunAction.class);
         if(records!=null)
-            id=records.getRecordsCount()+1;
+            id=records.getRecords().size()+1;
 
         return lb.getNumber()+"-"+id;
     }
@@ -418,7 +434,7 @@ public final class BatchTask extends AbstractModelObject implements Queue.Task, 
 
     private static final Adapter<BatchRun.RunAdapter> ADAPTER = new Adapter<BatchRun.RunAdapter>() {
         public int compare(BatchRun.RunAdapter record, String key) {
-            int[] lhs = parse(record.run.getNumberAsString());
+            int[] lhs = parse(record.run.getNumber());
             int[] rhs = parse(key);
 
             int d = lhs[0]-rhs[0];
@@ -427,7 +443,7 @@ public final class BatchTask extends AbstractModelObject implements Queue.Task, 
         }
 
         public String getKey(BatchRun.RunAdapter record) {
-            return record.run.getNumberAsString();
+            return record.run.getNumber();
         }
 
         public boolean isBuilding(BatchRun.RunAdapter record) {
@@ -496,17 +512,16 @@ public final class BatchTask extends AbstractModelObject implements Queue.Task, 
     /**
      * {@inheritDoc}
      */
-    /*public Collection<? extends SubTask> getSubTasks() {
+    public Collection<? extends SubTask> getSubTasks() {
         return Collections.singleton(this);
-    }*/
+    }
 
     /** {@inheritDoc} */
-    /*
     @Nonnull
     @Override
     public Authentication getDefaultAuthentication() {
         return ACL.SYSTEM;
-    }*/
+    }
 
     /**
      * {@inheritDoc}

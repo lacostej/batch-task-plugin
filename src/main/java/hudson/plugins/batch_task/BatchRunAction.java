@@ -50,18 +50,19 @@ public final class BatchRunAction implements Action {
     /**
      * Gets run records. Newer ones first.
      */
-    public int getRecordsCount() {
-        return records.size();
+    public List<BatchRun> getRecords() {
+        return Collections.unmodifiableList(records);
     }
 
     /**
      * Get run records for a particular task.
-     * @param taskName Get runs for this task
+     * @param task Get runs for this task
      */
-    public List<BatchRun.RunAdapter> getRecords(String taskName) {
+    public List<BatchRun.RunAdapter> getRecords(BatchTask task) {
         List<BatchRun.RunAdapter> result = new ArrayList<>(records.size());
         for (BatchRun r : records) {
-            if (r.taskName.equals(taskName)) result.add(r.getUpdatedRun());
+            // FIXME some tasks may already have the data in
+            if (r.taskName.equals(task.name)) result.add(r.getUpdatedRun(task));
         }
         return result;
     }
@@ -85,8 +86,9 @@ public final class BatchRunAction implements Action {
     }
 
     private Object readResolve() {
-        for (BatchRun r : records)
-            r.parent = this;
+        for (BatchRun r : records) {
+            r.setParent(this);
+        }
         Collections.sort(records);
         return this;
     }
